@@ -23,6 +23,7 @@ class GB_Admin {
 	public static function init() {
 		// Register admin settings page hooks
 		add_filter( 'woocommerce_get_sections_shipping', array( __CLASS__, 'add_shipping_section' ) );
+		add_filter( 'woocommerce_get_settings_shipping', array( __CLASS__, 'get_settings_fields' ), 10, 2 );
 		add_action( 'woocommerce_settings_shipping', array( __CLASS__, 'settings_page' ) );
 		add_action( 'woocommerce_settings_save_shipping', array( __CLASS__, 'save_settings' ) );
 		
@@ -58,11 +59,28 @@ class GB_Admin {
 	}
 
 	/**
-	 * Output settings page based on current section.
+	 * Get settings fields for WooCommerce settings API.
 	 * 
-	 * @param string $current_section Current settings section.
+	 * Returns empty array because we use custom HTML output instead.
+	 * 
+	 * @param array  $settings Current settings.
+	 * @param string $current_section Current section.
+	 * @return array Settings fields.
 	 */
-	public static function settings_page( $current_section ) {
+	public static function get_settings_fields( $settings, $current_section ) {
+		if ( 'gb_shipping_rules' === $current_section ) {
+			// Return empty - we handle our own output
+			return array();
+		}
+		return $settings;
+	}
+
+	/**
+	 * Output settings page based on current section.
+	 */
+	public static function settings_page() {
+		global $current_section;
+		
 		if ( 'gb_shipping_rules' === $current_section ) {
 			self::output_settings_page();
 		}
@@ -95,10 +113,7 @@ class GB_Admin {
 		<h2><?php esc_html_e( 'GaitBeacon Shipping Rules', 'gaitbeacon-shipping-rules' ); ?></h2>
 		<p><?php esc_html_e( 'Configure rules to show or hide specific shipping methods based on product shipping classes in the cart.', 'gaitbeacon-shipping-rules' ); ?></p>
 		
-		<form method="post" action="" id="gb-shipping-rules-form">
-			<?php wp_nonce_field( 'gb_save_shipping_rules', 'gb_shipping_rules_nonce' ); ?>
-			
-			<table class="widefat" id="gb-rules-table">
+		<table class="widefat" id="gb-rules-table">
 				<thead>
 					<tr>
 						<th style="width: 30%;"><?php esc_html_e( 'Shipping Class', 'gaitbeacon-shipping-rules' ); ?></th>
@@ -125,13 +140,8 @@ class GB_Admin {
 				<button type="button" class="button" id="gb-add-rule"><?php esc_html_e( 'Add Rule', 'gaitbeacon-shipping-rules' ); ?></button>
 			</p>
 			
-			<p class="submit">
-				<input type="submit" name="gb_save_rules" class="button-primary" value="<?php esc_attr_e( 'Save Rules', 'gaitbeacon-shipping-rules' ); ?>" />
-			</p>
-		</form>
-		
-		<?php self::output_styles(); ?>
-		<?php self::output_scripts( $rules ); ?>
+			<?php self::output_styles(); ?>
+			<?php self::output_scripts( $rules ); ?>
 		<?php
 	}
 
@@ -157,28 +167,32 @@ class GB_Admin {
 	 * @param array $rules Current rules for calculating initial index.
 	 */
 	private static function output_scripts( $rules ) {
+		$rule_count = ! empty( $rules ) ? count( $rules ) : 1;
 		?>
 		<script type="text/javascript">
 			jQuery(document).ready(function($) {
-				var ruleIndex = <?php echo count( $rules ); ?>;
+				var ruleIndex = <?php echo $rule_count; ?>;
 				
-				// Add new rule row by cloning the first row
+				// Add new rule row by cloning the last row
 				$('#gb-add-rule').on('click', function() {
-					var newRow = $('#gb-rules-table tbody tr:first').clone();
+					var lastRow = $('#gb-rules-table tbody tr:last');
+					var newRow = lastRow.clone();
 					
 					// Update field names with new index
 					newRow.find('select, input').each(function() {
 						var name = $(this).attr('name');
 						if (name) {
-							var newName = name.replace(/\[\d+\]/, '[' + ruleIndex + ']');
+							// Replace the index in brackets with new index
+							var newName = name.replace(/\[(\d+)\]/, '[' + ruleIndex + ']');
 							$(this).attr('name', newName);
 						}
-						$(this).val('');
 					});
 					
-					// Reset selections
+					// Clear all selections
+					newRow.find('select').val('');
 					newRow.find('option').prop('selected', false);
 					
+					// Append new row
 					$('#gb-rules-table tbody').append(newRow);
 					ruleIndex++;
 				});
@@ -186,7 +200,8 @@ class GB_Admin {
 				// Remove rule row (prevent removing last row)
 				$(document).on('click', '.gb-remove-rule', function(e) {
 					e.preventDefault();
-					if ($('#gb-rules-table tbody tr').length > 1) {
+					var rowCount = $('#gb-rules-table tbody tr').length;
+					if (rowCount > 1) {
 						$(this).closest('tr').remove();
 					} else {
 						alert('<?php esc_html_e( 'You must have at least one rule.', 'gaitbeacon-shipping-rules' ); ?>');
@@ -258,17 +273,13 @@ class GB_Admin {
 	 * 
 	 * Validates and saves the shipping rules configuration to wp_options.
 	 * Includes security checks (nonce, capabilities) and input sanitization.
-	 * Displays success notice after saving.
+	 * Called by WooCommerce when "Save changes" button is clicked.
 	 */
 	public static function save_settings() {
+		global $current_section;
 		
-		// Check if form was submitted
-		if ( ! isset( $_POST['gb_save_rules'] ) ) {
-			return;
-		}
-		
-		// Verify nonce
-		if ( ! isset( $_POST['gb_shipping_rules_nonce'] ) || ! wp_verify_nonce( $_POST['gb_shipping_rules_nonce'], 'gb_save_shipping_rules' ) ) {
+		// Only process if we're on our section
+		if ( 'gb_shipping_rules' !== $current_section ) {
 			return;
 		}
 		
@@ -303,9 +314,6 @@ class GB_Admin {
 		);
 		
 		update_option( 'gb_shipping_rules_settings', $settings );
-		
-		// Queue success notice to display after redirect
-		add_action( 'admin_notices', array( __CLASS__, 'settings_saved_notice' ) );
 	}
 
 	/**

@@ -236,9 +236,11 @@ If you see "requires WooCommerce to be installed and activated":
 ### Settings page not saving
 
 1. **Required fields**: Ensure all three fields (Shipping Class, Action, Methods) are filled for each rule
-2. **Browser compatibility**: Try a different browser if the form doesn't submit
-3. **JavaScript errors**: Check browser console for errors
-4. **Permissions**: Ensure your user account has `manage_woocommerce` capability
+2. **Multiple rules**: If only one rule saves when you configure multiple, refresh the page to load the latest JavaScript
+3. **Browser cache**: Clear browser cache and hard refresh (Ctrl+Shift+R or Cmd+Shift+R)
+4. **JavaScript errors**: Check browser console for errors
+5. **Permissions**: Ensure your user account has `manage_woocommerce` capability
+6. **Debug mode**: Enable WordPress debug mode to check for PHP errors in `/wp-content/debug.log`
 
 ## Changelog
 
